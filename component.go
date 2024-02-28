@@ -23,7 +23,7 @@ type Component struct {
 	// The health check of the component.
 	//
 	// A nil Check will cause a panic.
-	Check Check
+	Check CheckFunc
 }
 
 // ComponentStatus represents the status of a component.
@@ -43,7 +43,7 @@ type Components []Component
 func (c Components) Status(ctx context.Context) Status {
 	status := StatusUp
 	for _, component := range c {
-		cs := component.Check.Status(ctx)
+		cs := component.Check(ctx)
 
 		// If the component is critical, and it's down, the overall status is down.
 		if cs == StatusDown && component.Critical {
@@ -72,7 +72,7 @@ func (c Components) ComponentStatus(ctx context.Context) []ComponentStatus {
 		statuses = append(statuses, ComponentStatus{
 			Name:     component.Name,
 			Critical: component.Critical,
-			Status:   component.Check.Status(ctx),
+			Status:   component.Check(ctx),
 		})
 	}
 	return statuses
@@ -90,7 +90,7 @@ func (c Components) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	status := StatusUp
 	for _, component := range c {
-		cs := component.Check.Status(r.Context())
+		cs := component.Check(r.Context())
 
 		// If the component is critical, and it's down, the overall status is down.
 		if cs == StatusDown && component.Critical {
