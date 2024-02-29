@@ -1,0 +1,108 @@
+= health-go
+
+A simple lightweight library for exposing health checks over HTTP for Go applications.
+
+This library has the concept of three different statuses:
+
+* UP - Application/System is up and operational as expected
+* DEGREDADED - Application/System is operational and usable, but not components or features are working or performing as expected.
+* DOWN - Application/System is not operational and not usable.
+
+There is an overall status and a status per component. A component can be thought of as a subsystem or feature of the application. Examples might include a database like Mongo, Postgres, Cassandra, or a distributed cache like Redis. A component can either be marked as critical or non-critical. A non-critical component will never result in the overall application health being considered down. However, if a critical component fails its health check then the overall health will be considered down.
+
+== Usage
+
+Using health-go is simple and straight forward. The components can be registered when calling `New()` or by calling `Register` with the components to Register. When registering components they should be named in such a way it's easy to identify and understand what the component/subsystem is. When registering a component a non-nil `CheckFunc` must be provided. A `CheckFunc` is simply a function type that accepts a `context.Context` and returns a `Status`. This provides a lot of flexibility to create your own health checks to meet your requirements. As an example, in some cases maybe pinging a Redis cluster is enough to validate it is up and operational. However, perhaps in other cases, you want to ensure it's also writable/readable, so you perform a more complex healthcheck by setting, fetching, and then deleting a value.
+
+The `Health` type implements `http.Handler` so it can be easily used with the standard library http package, or any third party libraries that are compatible with the standard library. It also conveniently has a `HandlerFunc` method if you prefer to use those over `Handler`.
+
+The below example shows how to set up a healthcheck for Redis and considers Redis a critical component, meaning if Redis is down the application is considered down. This check could also be enhanced to set an SLA, and if Redis doesn't respond to the PING in a specified duration, it could return back `StatusDegraded`.
+
+[source,go]
+----
+package main
+
+import (
+	"context"
+	"net/http"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/redis/go-redis/v9"
+
+	"github.com/jkratz55/health-go"
+)
+
+func main() {
+
+	rdb := redis.NewClient(&redis.Options{
+		Addr: "localhost:6379",
+	})
+
+	hc := health.New()
+	hc.Register(health.Component{
+		Name:     "redis",
+		Critical: true,
+		Check: func(ctx context.Context) health.Status {
+			res, err := rdb.Ping(ctx).Result()
+			if err != nil {
+				return health.StatusDown
+			}
+			if res != "PONG" {
+				return health.StatusDown
+			}
+			return health.StatusUp
+		},
+	})
+
+	if err := health.EnablePrometheus(hc); err != nil {
+		panic(err)
+	}
+
+	go func() {
+		promServer := http.Server{
+			Addr:    ":8082",
+			Handler: promhttp.Handler(),
+		}
+		promServer.ListenAndServe()
+	}()
+
+	http.HandleFunc("/health", hc.HandlerFunc())
+	http.ListenAndServe(":8080", nil)
+}
+
+----
+
+Example Response
+
+[source,json]
+----
+{
+  "status": "UP",
+  "uptime": "11.961392833s",
+  "components": [
+    {
+      "name": "redis",
+      "critical": true,
+      "status": "UP"
+    }
+  ]
+}
+----
+
+=== Prometheus Support
+
+This library provides prometheus support out of the box by calling `EnablePrometheus` and passing the `Health` type. This will create a gauge for the overall status, and a gauge for each component.
+
+[source,text]
+----
+# HELP health_component_status Indicator of status of the application components. 0 is down, 1 is degraded, 2 is up.
+# TYPE health_component_status gauge
+health_component_status{component="redis"} 2
+# HELP health_status Indicator of overall status of the application instance. 0 is down, 1 is degraded, 2 is up.
+# TYPE health_status gauge
+health_status 2
+----
+
+== Roadmap
+
+* Add common checks: Redis, Mongo, Postgres, etc.
