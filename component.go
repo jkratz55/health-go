@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -20,10 +21,62 @@ type Component struct {
 	// it fails its check, the overall status of the system will be down.
 	Critical bool
 
+	// Timeout for the health check. If the health check takes longer than the
+	// timeout, the check is considered to have failed. The default value is
+	// 5 seconds.
+	Timeout time.Duration
+
+	// Interval between health checks. If the interval is set to zero, a default
+	// interval of 15 seconds will be used. The Interval must be greater than
+	// the Timeout.
+	Interval time.Duration
+
 	// The health check of the component.
 	//
 	// A nil Check will cause a panic.
 	Check CheckFunc
+
+	status Status
+}
+
+func (c *Component) init() {
+	if strings.TrimSpace(c.Name) == "" {
+		c.Name = "MISSING NAME"
+	}
+	if c.Timeout == 0 {
+		c.Timeout = 5 * time.Second
+	}
+	if c.Interval == 0 {
+		c.Interval = 15 * time.Second
+	}
+	if c.Timeout >= c.Interval {
+		c.Interval = c.Timeout + 1*time.Second
+	}
+	c.status = StatusUp
+}
+
+// monitor performs a healthcheck on the component at regular intervals and
+// updates the status of the component.
+func (c *Component) monitor(ctx context.Context) {
+	ticker := time.NewTicker(c.Interval)
+	for {
+		select {
+		case <-ticker.C:
+			ctx, cancel := context.WithTimeout(context.Background(), c.Timeout)
+			err := c.Check(ctx)
+			cancel()
+
+			// If the health check fails, the status of the component is set to
+			// down, otherwise it is set to up.
+			if err != nil {
+				c.status = StatusDown
+			} else {
+				c.status = StatusUp
+			}
+		case <-ctx.Done():
+			return
+		}
+	}
 }
 
 // ComponentStatus represents the status of a component.
@@ -43,22 +96,20 @@ type Components []Component
 func (c Components) Status(ctx context.Context) Status {
 	status := StatusUp
 	for _, component := range c {
-		cs := component.Check(ctx)
-
 		// If the component is critical, and it's down, the overall status is down.
-		if cs == StatusDown && component.Critical {
+		if component.status == StatusDown && component.Critical {
 			status = StatusDown
 		}
 		// If the component is not critical, and it's down, the overall status
 		// is degraded is set to degraded unless the overall status has already
 		// been determined to be down.
-		if cs == StatusDown && !component.Critical && status != StatusDown {
+		if component.status == StatusDown && !component.Critical && status != StatusDown {
 			status = StatusDegraded
 		}
 		// If the component is degraded regardless of its criticality, the overall
 		// status shall be considered degraded unless the overall status has already
 		// been determined to be down.
-		if cs == StatusDegraded && status != StatusDown {
+		if component.status == StatusDegraded && status != StatusDown {
 			status = StatusDegraded
 		}
 	}
@@ -72,7 +123,7 @@ func (c Components) ComponentStatus(ctx context.Context) []ComponentStatus {
 		statuses = append(statuses, ComponentStatus{
 			Name:     component.Name,
 			Critical: component.Critical,
-			Status:   component.Check(ctx),
+			Status:   component.status,
 		})
 	}
 	return statuses
@@ -90,29 +141,27 @@ func (c Components) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	status := StatusUp
 	for _, component := range c {
-		cs := component.Check(r.Context())
-
 		// If the component is critical, and it's down, the overall status is down.
-		if cs == StatusDown && component.Critical {
+		if component.status == StatusDown && component.Critical {
 			status = StatusDown
 		}
 		// If the component is not critical, and it's down, the overall status
 		// is degraded is set to degraded unless the overall status has already
 		// been determined to be down.
-		if cs == StatusDown && !component.Critical && status != StatusDown {
+		if component.status == StatusDown && !component.Critical && status != StatusDown {
 			status = StatusDegraded
 		}
 		// If the component is degraded regardless of its criticality, the overall
 		// status shall be considered degraded unless the overall status has already
 		// been determined to be down.
-		if cs == StatusDegraded && status != StatusDown {
+		if component.status == StatusDegraded && status != StatusDown {
 			status = StatusDegraded
 		}
 
 		resp = append(resp, ComponentStatus{
 			Name:     component.Name,
 			Critical: component.Critical,
-			Status:   cs,
+			Status:   component.status,
 		})
 	}
 

@@ -23,7 +23,7 @@ func EnablePrometheus(h *Health) error {
 	componentStatus := prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "health",
 		Name:      "component_status",
-		Help:      "Indicator of status of the application components. 0 is down, 1 is degraded, 2 is up.",
+		Help:      "Indicator of status of the application components. 0 is down, 1 is up",
 	}, []string{"component"})
 
 	c := &collector{
@@ -62,9 +62,9 @@ func (c collector) Collect(metrics chan<- prometheus.Metric) {
 		case StatusDown:
 			c.component.WithLabelValues(status.Name).Set(0)
 		case StatusDegraded:
-			c.component.WithLabelValues(status.Name).Set(1)
+			c.component.WithLabelValues(status.Name).Set(0)
 		case StatusUp:
-			c.component.WithLabelValues(status.Name).Set(2)
+			c.component.WithLabelValues(status.Name).Set(1)
 		}
 	}
 
