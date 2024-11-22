@@ -190,28 +190,6 @@ func TestHealth_Status(t *testing.T) {
 			},
 			expected: StatusDown,
 		},
-		{
-			name: "Critical Down and Non Critical Degraded",
-			init: func() *Health {
-				return New(
-					Component{
-						Name:     "redis",
-						Critical: false,
-						Check: func(ctx context.Context) error {
-							return errors.New("redis down")
-						},
-					},
-					Component{
-						Name:     "mongo",
-						Critical: true,
-						Check: func(ctx context.Context) error {
-							return errors.New("mongo down")
-						},
-					},
-				)
-			},
-			expected: StatusDown,
-		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

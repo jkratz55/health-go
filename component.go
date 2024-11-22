@@ -90,7 +90,7 @@ type ComponentStatus struct {
 //
 // Components implements http.Handler and can be used to serve as a readiness
 // or liveness health check endpoint.
-type Components []Component
+type Components []*Component
 
 // Status returns the overall status of the components.
 func (c Components) Status(ctx context.Context) Status {

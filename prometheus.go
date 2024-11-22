@@ -13,7 +13,7 @@ import (
 // of 0 for down, 1 for degraded, and 2 for up.
 //
 // The status of each component is exposed as a gauge named "health_component_status"
-// with a value of 0 for down, 1 for degraded, and 2 for up.
+// with a value of 0 for down, 1 for up.
 func EnablePrometheus(h *Health) error {
 	overallStatus := prometheus.NewGauge(prometheus.GaugeOpts{
 		Namespace: "health",
