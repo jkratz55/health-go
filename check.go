@@ -4,8 +4,7 @@ import (
 	"context"
 )
 
-// CheckFunc is a function type that provides the health status of a component.
-//
-// A CheckFunc should return either StatusUp, StatusDegraded, or StatusDown
-// depending on the health of the component.
-type CheckFunc func(ctx context.Context) Status
+// CheckFunc is a function type that checks/verifies the health of a component
+// and or service. If an error is returned, the component/service is considered
+// unhealthy and down.
+type CheckFunc func(ctx context.Context) error

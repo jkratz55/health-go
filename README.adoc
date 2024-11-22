@@ -12,11 +12,11 @@ There is an overall status and a status per component. A component can be though
 
 == Usage
 
-Using health-go is simple and straight forward. The components can be registered when calling `New()` or by calling `Register` with the components to Register. When registering components they should be named in such a way it's easy to identify and understand what the component/subsystem is. When registering a component a non-nil `CheckFunc` must be provided. A `CheckFunc` is simply a function type that accepts a `context.Context` and returns a `Status`. This provides a lot of flexibility to create your own health checks to meet your requirements. As an example, in some cases maybe pinging a Redis cluster is enough to validate it is up and operational. However, perhaps in other cases, you want to ensure it's also writable/readable, so you perform a more complex healthcheck by setting, fetching, and then deleting a value.
+Using health-go is simple and straight forward. The components can be registered when calling `New()` or by calling `Register` with the components to Register. When registering components they should be named in such a way it's easy to identify and understand what the component/subsystem is. When registering a component a non-nil `CheckFunc` must be provided. A `CheckFunc` is simply a function type that accepts a `context.Context` and returns a `error`. This provides a lot of flexibility to create your own health checks to meet your requirements. As an example, in some cases maybe pinging a Redis cluster is enough to validate it is up and operational. However, perhaps in other cases, you want to ensure it's also writable/readable, so you perform a more complex healthcheck by setting, fetching, and then deleting a value.
 
 The `Health` type implements `http.Handler` so it can be easily used with the standard library http package, or any third party libraries that are compatible with the standard library. It also conveniently has a `HandlerFunc` method if you prefer to use those over `Handler`.
 
-The below example shows how to set up a healthcheck for Redis and considers Redis a critical component, meaning if Redis is down the application is considered down. This check could also be enhanced to set an SLA, and if Redis doesn't respond to the PING in a specified duration, it could return back `StatusDegraded`.
+The below example shows how to set up a healthcheck for Redis and considers Redis a critical component, meaning if Redis is down the application is considered down.
 
 [source,go]
 ----
@@ -95,14 +95,10 @@ This library provides prometheus support out of the box by calling `EnablePromet
 
 [source,text]
 ----
-# HELP health_component_status Indicator of status of the application components. 0 is down, 1 is degraded, 2 is up.
+# HELP health_component_status Indicator of status of the application components. 0 is down, 1 is up.
 # TYPE health_component_status gauge
-health_component_status{component="redis"} 2
+health_component_status{component="redis"} 1
 # HELP health_status Indicator of overall status of the application instance. 0 is down, 1 is degraded, 2 is up.
 # TYPE health_status gauge
 health_status 2
 ----
-
-== Roadmap
-
-* Add common checks: Redis, Mongo, Postgres, etc.
