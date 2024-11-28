@@ -1,5 +1,7 @@
 = health-go
 
+== TODO: UPDATE README/DOCUMENTATION
+
 A simple lightweight library for exposing health checks over HTTP for Go applications.
 
 This library has the concept of three different statuses:

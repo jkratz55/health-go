@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"errors"
 	"net/http"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
@@ -20,15 +22,17 @@ func main() {
 	hc.Register(health.Component{
 		Name:     "redis",
 		Critical: true,
-		Check: func(ctx context.Context) health.Status {
+		Timeout:  time.Second * 1,
+		Interval: time.Second * 5,
+		Check: func(ctx context.Context) error {
 			res, err := rdb.Ping(ctx).Result()
 			if err != nil {
-				return health.StatusDown
+				return err
 			}
 			if res != "PONG" {
-				return health.StatusDown
+				return errors.New("unexpected response")
 			}
-			return health.StatusUp
+			return nil
 		},
 	})
 

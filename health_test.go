@@ -3,6 +3,7 @@ package health
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -30,15 +31,15 @@ func TestNew(t *testing.T) {
 				components = append(components, Component{
 					Name:     "redis",
 					Critical: false,
-					Check: func(ctx context.Context) Status {
-						return StatusUp
+					Check: func(ctx context.Context) error {
+						return nil
 					},
 				})
 				components = append(components, Component{
 					Name:     "mongo",
 					Critical: true,
-					Check: func(ctx context.Context) Status {
-						return StatusUp
+					Check: func(ctx context.Context) error {
+						return nil
 					},
 				})
 				return New(components...)
@@ -59,15 +60,15 @@ func TestHealth_Register(t *testing.T) {
 	h.Register(Component{
 		Name:     "redis",
 		Critical: false,
-		Check: func(ctx context.Context) Status {
-			return StatusUp
+		Check: func(ctx context.Context) error {
+			return nil
 		},
 	})
 	h.Register(Component{
 		Name:     "mongo",
 		Critical: true,
-		Check: func(ctx context.Context) Status {
-			return StatusUp
+		Check: func(ctx context.Context) error {
+			return nil
 		},
 	})
 	assert.Equal(t, 2, len(h.components))
@@ -76,15 +77,15 @@ func TestHealth_Register(t *testing.T) {
 		{
 			Name:     "redis",
 			Critical: false,
-			Check: func(ctx context.Context) Status {
-				return StatusUp
+			Check: func(ctx context.Context) error {
+				return nil
 			},
 		},
 		{
 			Name:     "mongo",
 			Critical: true,
-			Check: func(ctx context.Context) Status {
-				return StatusUp
+			Check: func(ctx context.Context) error {
+				return nil
 			},
 		},
 	}
@@ -108,42 +109,20 @@ func TestHealth_Status(t *testing.T) {
 					Component{
 						Name:     "redis",
 						Critical: false,
-						Check: func(ctx context.Context) Status {
-							return StatusUp
+						Check: func(ctx context.Context) error {
+							return nil
 						},
 					},
 					Component{
 						Name:     "mongo",
 						Critical: true,
-						Check: func(ctx context.Context) Status {
-							return StatusUp
+						Check: func(ctx context.Context) error {
+							return nil
 						},
 					},
 				)
 			},
 			expected: StatusUp,
-		},
-		{
-			name: "Critical Component Degraded",
-			init: func() *Health {
-				return New(
-					Component{
-						Name:     "redis",
-						Critical: false,
-						Check: func(ctx context.Context) Status {
-							return StatusUp
-						},
-					},
-					Component{
-						Name:     "mongo",
-						Critical: true,
-						Check: func(ctx context.Context) Status {
-							return StatusDegraded
-						},
-					},
-				)
-			},
-			expected: StatusDegraded,
 		},
 		{
 			name: "Critical Component Down",
@@ -152,15 +131,15 @@ func TestHealth_Status(t *testing.T) {
 					Component{
 						Name:     "redis",
 						Critical: false,
-						Check: func(ctx context.Context) Status {
-							return StatusUp
+						Check: func(ctx context.Context) error {
+							return nil
 						},
 					},
 					Component{
 						Name:     "mongo",
 						Critical: true,
-						Check: func(ctx context.Context) Status {
-							return StatusDown
+						Check: func(ctx context.Context) error {
+							return errors.New("mongo down")
 						},
 					},
 				)
@@ -174,15 +153,15 @@ func TestHealth_Status(t *testing.T) {
 					Component{
 						Name:     "redis",
 						Critical: false,
-						Check: func(ctx context.Context) Status {
-							return StatusDown
+						Check: func(ctx context.Context) error {
+							return errors.New("redis down")
 						},
 					},
 					Component{
 						Name:     "mongo",
 						Critical: true,
-						Check: func(ctx context.Context) Status {
-							return StatusUp
+						Check: func(ctx context.Context) error {
+							return nil
 						},
 					},
 				)
@@ -196,59 +175,15 @@ func TestHealth_Status(t *testing.T) {
 					Component{
 						Name:     "redis",
 						Critical: false,
-						Check: func(ctx context.Context) Status {
-							return StatusDown
+						Check: func(ctx context.Context) error {
+							return errors.New("redis down")
 						},
 					},
 					Component{
 						Name:     "mongo",
 						Critical: true,
-						Check: func(ctx context.Context) Status {
-							return StatusDown
-						},
-					},
-				)
-			},
-			expected: StatusDown,
-		},
-		{
-			name: "Non Critical Component Degraded",
-			init: func() *Health {
-				return New(
-					Component{
-						Name:     "redis",
-						Critical: false,
-						Check: func(ctx context.Context) Status {
-							return StatusDegraded
-						},
-					},
-					Component{
-						Name:     "mongo",
-						Critical: true,
-						Check: func(ctx context.Context) Status {
-							return StatusUp
-						},
-					},
-				)
-			},
-			expected: StatusDegraded,
-		},
-		{
-			name: "Critical Down and Non Critical Degraded",
-			init: func() *Health {
-				return New(
-					Component{
-						Name:     "redis",
-						Critical: false,
-						Check: func(ctx context.Context) Status {
-							return StatusDegraded
-						},
-					},
-					Component{
-						Name:     "mongo",
-						Critical: true,
-						Check: func(ctx context.Context) Status {
-							return StatusDown
+						Check: func(ctx context.Context) error {
+							return errors.New("mongo down")
 						},
 					},
 				)
@@ -259,6 +194,14 @@ func TestHealth_Status(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			h := tt.init()
+			for i := 0; i < len(h.components); i++ {
+				err := h.components[i].Check(context.Background())
+				if err == nil {
+					h.components[i].status = StatusUp
+				} else {
+					h.components[i].status = StatusDown
+				}
+			}
 			actual := h.Status(context.Background())
 			assert.Equal(t, tt.expected, actual)
 		})
@@ -285,15 +228,15 @@ func TestHealth_ServeHTTP(t *testing.T) {
 					Component{
 						Name:     "redis",
 						Critical: false,
-						Check: func(ctx context.Context) Status {
-							return StatusUp
+						Check: func(ctx context.Context) error {
+							return nil
 						},
 					},
 					Component{
 						Name:     "mongo",
 						Critical: true,
-						Check: func(ctx context.Context) Status {
-							return StatusUp
+						Check: func(ctx context.Context) error {
+							return nil
 						},
 					},
 				)
@@ -322,15 +265,15 @@ func TestHealth_ServeHTTP(t *testing.T) {
 					Component{
 						Name:     "redis",
 						Critical: false,
-						Check: func(ctx context.Context) Status {
-							return StatusUp
+						Check: func(ctx context.Context) error {
+							return nil
 						},
 					},
 					Component{
 						Name:     "mongo",
 						Critical: true,
-						Check: func(ctx context.Context) Status {
-							return StatusDown
+						Check: func(ctx context.Context) error {
+							return errors.New("mongo down")
 						},
 					},
 				)
@@ -359,32 +302,32 @@ func TestHealth_ServeHTTP(t *testing.T) {
 					Component{
 						Name:     "redis",
 						Critical: false,
-						Check: func(ctx context.Context) Status {
-							return StatusUp
+						Check: func(ctx context.Context) error {
+							return errors.New("redis down")
 						},
 					},
 					Component{
 						Name:     "mongo",
 						Critical: true,
-						Check: func(ctx context.Context) Status {
-							return StatusDown
+						Check: func(ctx context.Context) error {
+							return nil
 						},
 					},
 				)
 			},
-			expectedHttpStatus: http.StatusServiceUnavailable,
+			expectedHttpStatus: http.StatusOK,
 			expectedResponse: response{
-				Status: StatusDown,
+				Status: StatusDegraded,
 				Components: []ComponentStatus{
 					{
 						Name:     "redis",
 						Critical: false,
-						Status:   StatusUp,
+						Status:   StatusDown,
 					},
 					{
 						Name:     "mongo",
 						Critical: true,
-						Status:   StatusDown,
+						Status:   StatusUp,
 					},
 				},
 			},
@@ -396,15 +339,15 @@ func TestHealth_ServeHTTP(t *testing.T) {
 					Component{
 						Name:     "redis",
 						Critical: false,
-						Check: func(ctx context.Context) Status {
-							return StatusDown
+						Check: func(ctx context.Context) error {
+							return errors.New("redis down")
 						},
 					},
 					Component{
 						Name:     "mongo",
 						Critical: true,
-						Check: func(ctx context.Context) Status {
-							return StatusDown
+						Check: func(ctx context.Context) error {
+							return errors.New("mongo down")
 						},
 					},
 				)
@@ -422,154 +365,6 @@ func TestHealth_ServeHTTP(t *testing.T) {
 						Name:     "mongo",
 						Critical: true,
 						Status:   StatusDown,
-					},
-				},
-			},
-		},
-		{
-			name: "Non Critical Component Degraded",
-			init: func() *Health {
-				return New(
-					Component{
-						Name:     "redis",
-						Critical: false,
-						Check: func(ctx context.Context) Status {
-							return StatusDegraded
-						},
-					},
-					Component{
-						Name:     "mongo",
-						Critical: true,
-						Check: func(ctx context.Context) Status {
-							return StatusUp
-						},
-					},
-				)
-			},
-			expectedHttpStatus: http.StatusOK,
-			expectedResponse: response{
-				Status: StatusDegraded,
-				Components: []ComponentStatus{
-					{
-						Name:     "redis",
-						Critical: false,
-						Status:   StatusDegraded,
-					},
-					{
-						Name:     "mongo",
-						Critical: true,
-						Status:   StatusUp,
-					},
-				},
-			},
-		},
-		{
-			name: "Critical Component Degraded",
-			init: func() *Health {
-				return New(
-					Component{
-						Name:     "redis",
-						Critical: false,
-						Check: func(ctx context.Context) Status {
-							return StatusUp
-						},
-					},
-					Component{
-						Name:     "mongo",
-						Critical: true,
-						Check: func(ctx context.Context) Status {
-							return StatusDegraded
-						},
-					},
-				)
-			},
-			expectedHttpStatus: http.StatusOK,
-			expectedResponse: response{
-				Status: StatusDegraded,
-				Components: []ComponentStatus{
-					{
-						Name:     "redis",
-						Critical: false,
-						Status:   StatusUp,
-					},
-					{
-						Name:     "mongo",
-						Critical: true,
-						Status:   StatusDegraded,
-					},
-				},
-			},
-		},
-		{
-			name: "All Degraded",
-			init: func() *Health {
-				return New(
-					Component{
-						Name:     "redis",
-						Critical: false,
-						Check: func(ctx context.Context) Status {
-							return StatusDegraded
-						},
-					},
-					Component{
-						Name:     "mongo",
-						Critical: true,
-						Check: func(ctx context.Context) Status {
-							return StatusDegraded
-						},
-					},
-				)
-			},
-			expectedHttpStatus: http.StatusOK,
-			expectedResponse: response{
-				Status: StatusDegraded,
-				Components: []ComponentStatus{
-					{
-						Name:     "redis",
-						Critical: false,
-						Status:   StatusDegraded,
-					},
-					{
-						Name:     "mongo",
-						Critical: true,
-						Status:   StatusDegraded,
-					},
-				},
-			},
-		},
-		{
-			name: "One Critical Up One Critical Degraded",
-			init: func() *Health {
-				return New(
-					Component{
-						Name:     "redis",
-						Critical: true,
-						Check: func(ctx context.Context) Status {
-							return StatusDown
-						},
-					},
-					Component{
-						Name:     "mongo",
-						Critical: true,
-						Check: func(ctx context.Context) Status {
-							return StatusUp
-						},
-					},
-				)
-			},
-			expectedHttpStatus: http.StatusServiceUnavailable,
-			expectedResponse: response{
-				Status: StatusDown,
-				Components: []ComponentStatus{
-					{
-						Name:     "redis",
-						Critical: true,
-						Status:   StatusDown,
-					},
-					{
-						Name:     "mongo",
-						Critical: true,
-						Status:   StatusUp,
 					},
 				},
 			},
@@ -579,6 +374,14 @@ func TestHealth_ServeHTTP(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			h := tt.init()
+			for i := 0; i < len(h.components); i++ {
+				err := h.components[i].Check(context.Background())
+				if err == nil {
+					h.components[i].status = StatusUp
+				} else {
+					h.components[i].status = StatusDown
+				}
+			}
 			w := httptest.NewRecorder()
 			r := httptest.NewRequest(http.MethodGet, "/", nil)
 			h.ServeHTTP(w, r)
