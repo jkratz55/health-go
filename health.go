@@ -30,7 +30,8 @@ type Health struct {
 func New(components ...Component) *Health {
 	comps := make([]*Component, 0)
 	for _, c := range components {
-		comps = append(comps, &c)
+		comp := c
+		comps = append(comps, &comp)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Health{

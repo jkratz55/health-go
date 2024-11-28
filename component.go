@@ -3,6 +3,7 @@ package health
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -51,6 +52,7 @@ func (c *Component) init() {
 	}
 	if c.Timeout >= c.Interval {
 		c.Interval = c.Timeout + 1*time.Second
+		fmt.Println("Timeout was greater than or equal to interval. Setting interval to timeout + 1 second.")
 	}
 	c.status = StatusUp
 }

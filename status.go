@@ -5,6 +5,7 @@ import (
 	"net/http"
 )
 
+// Status represents the status of the application.
 type Status string
 
 const (
